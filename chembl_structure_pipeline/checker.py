@@ -7,11 +7,12 @@
 #  which is included in the file LICENSE, found at the root
 #  of the source tree.
 import re
-from rdkit import Chem
-from rdkit import Geometry
-from rdkit.Chem import rdinchi
 from collections import Counter
+from typing import Dict
+
 import rdkit
+from rdkit import Chem, Geometry
+from rdkit.Chem import rdinchi
 
 rdkversion = rdkit.__version__.split(".")[:2]
 if rdkversion < ["2019", "03"]:
@@ -36,7 +37,7 @@ class MolFileChecker(CheckerBase):
 
 
 # used as a cache
-__inchiDict = {}
+__inchiDict: Dict = {}
 
 
 def get_inchi(molb):

@@ -6,32 +6,37 @@
 #  The contents are covered by the terms of the MIT license
 #  which is included in the file LICENSE, found at the root
 #  of the source tree.
-import os
-from rdkit import Chem
-from rdkit.Chem.MolStandardize import rdMolStandardize
-from rdkit.Chem import rdMolTransforms
-from .exclude_flag import exclude_flag
-import rdkit
 import math
+import os
+from typing import Any, Tuple
+
+import rdkit
+from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
+from rdkit.Chem.MolStandardize import rdMolStandardize
+
+from .exclude_flag import exclude_flag
+
+Mol = Any  # custom type alias for rdkit.Chem.rdchem.Mol
 
 rdkversion = rdkit.__version__.split(".")
 if rdkversion < ["2019", "09", "2"]:
     raise ValueError("need an RDKit version >= 2019.09.2")
 
 
-def kekulize_mol(m):
+def kekulize_mol(m: Mol) -> Mol:
     Chem.Kekulize(m)
     return m
 
 
-def update_mol_valences(m):
+def update_mol_valences(m: Mol) -> Mol:
     m = Chem.Mol(m)
     m.UpdatePropertyCache(strict=False)
     return m
 
 
 # derived from the MolVS set, with ChEMBL-specific additions
-_normalization_transforms = """
+_normalization_transforms: str = """
 //	Name	SMIRKS
 Nitro to N+(O-)=O	[N;X3:1](=[O:2])=[O:3]>>[*+1:1]([*-1:2])=[*:3]
 Diazonium N	[*:1]-[N;X2:2]#[N;X1:3]>>[*:1]-[*+1:2]#[*:3]
@@ -57,10 +62,10 @@ _normalizer = rdMolStandardize.NormalizerFromData(
     _normalization_transforms, _normalizer_params
 )
 
-_alkoxide_pattern = Chem.MolFromSmarts("[Li,Na,K;+0]-[#7,#8;+0]")
+_alkoxide_pattern: Mol = Chem.MolFromSmarts("[Li,Na,K;+0]-[#7,#8;+0]")
 
 
-def normalize_mol(m):
+def normalize_mol(m: Mol) -> Mol:
     """ """
     Chem.FastFindRings(m)
     if m.HasSubstructMatch(_alkoxide_pattern):
@@ -73,7 +78,7 @@ def normalize_mol(m):
     return res
 
 
-def remove_hs_from_mol(m):
+def remove_hs_from_mol(m: Mol) -> Mol:
     """removes most Hs
 
     Hs that are preserved by the RDKit's Chem.RemoveHs() will not
@@ -145,13 +150,13 @@ def remove_hs_from_mol(m):
     return res
 
 
-def remove_sgroups_from_mol(m):
+def remove_sgroups_from_mol(m: Mol) -> Mol:
     """removes all Sgroups"""
     Chem.ClearMolSubstanceGroups(m)
     return m
 
 
-def uncharge_mol(m):
+def uncharge_mol(m: Mol) -> Mol:
     """
 
     >>> def uncharge_smiles(smi): return Chem.MolToSmiles(uncharge_mol(Chem.MolFromSmiles(smi)))
@@ -221,7 +226,7 @@ def _check_and_straighten_at_triple_bond(at, bond, conf):
         rdMolTransforms.SetAngleRad(conf, nbrs[0], at.GetIdx(), nbrs[1], math.pi)
 
 
-def _cleanup_triple_bonds(m):
+def _cleanup_triple_bonds(m: Mol):
     conf = m.GetConformer()
     if conf.Is3D():
         raise ValueError("can only operate on 2D conformers")
@@ -238,7 +243,7 @@ def _cleanup_triple_bonds(m):
                 _check_and_straighten_at_triple_bond(at, bond, conf)
 
 
-def _cleanup_allenes(m):
+def _cleanup_allenes(m: Mol):
     conf = m.GetConformer()
     if conf.Is3D():
         raise ValueError("can only operate on 2D conformers")
@@ -250,7 +255,7 @@ def _cleanup_allenes(m):
             rdMolTransforms.SetAngleRad(conf, match[0], match[1], match[2], math.pi)
 
 
-def cleanup_drawing_mol(m):
+def cleanup_drawing_mol(m: Mol) -> Mol:
     m = Chem.Mol(m)
     if not m.GetNumConformers():
         # if we don't have a conformer, just return
@@ -267,7 +272,7 @@ def cleanup_drawing_mol(m):
     return m
 
 
-def flatten_tartrate_mol(m):
+def flatten_tartrate_mol(m: Mol) -> Mol:
     tartrate = Chem.MolFromSmarts("OC(=O)C(O)C(O)C(=O)O")
     # make sure we only match free tartrate/tartaric acid fragments
     params = Chem.AdjustQueryParameters.NoAdjustments()
@@ -288,16 +293,21 @@ _solvents_file = os.path.join(_data_dir, "solvents.smi")
 _salts_file = os.path.join(_data_dir, "salts.smi")
 
 
-def get_fragment_parent_mol(m, check_exclusion=False, neutralize=False, verbose=False):
+def get_fragment_parent_mol(
+    m: Mol,
+    check_exclusion: bool = False,
+    neutralize: bool = False,
+    verbose: bool = False,
+) -> Tuple[Mol, bool]:
     with open(_solvents_file) as inf:
         solvents = []
         for l in inf:
             if not l or l[0] == "#":
                 continue
-            l = l.strip().split("\t")
-            if len(l) != 2:
+            l_list = l.strip().split("\t")
+            if len(l_list) != 2:
                 continue
-            solvents.append((l[0], Chem.MolFromSmarts(l[1])))
+            solvents.append((l_list[0], Chem.MolFromSmarts(l_list[1])))
 
     # there are a number of special cases for the ChEMBL salt stripping, so we
     # can't use the salt remover that's built into the RDKit standardizer.
@@ -339,10 +349,10 @@ def get_fragment_parent_mol(m, check_exclusion=False, neutralize=False, verbose=
         for l in inf:
             if not l or l[0] == "#":
                 continue
-            l = l.strip().split("\t")
-            if len(l) != 2:
+            l_list = l.strip().split("\t")
+            if len(l_list) != 2:
                 continue
-            salts.append((l[0], Chem.MolFromSmarts(l[1])))
+            salts.append((l_list[0], Chem.MolFromSmarts(l_list[1])))
 
     keepFrags1 = []
     keepFrags2 = []
@@ -427,7 +437,7 @@ def get_fragment_parent_mol(m, check_exclusion=False, neutralize=False, verbose=
     return res, exclude
 
 
-def get_isotope_parent_mol(m):
+def get_isotope_parent_mol(m: Mol) -> Mol:
     m = Chem.Mol(m)
     for at in m.GetAtoms():
         if at.GetIsotope():
@@ -435,7 +445,9 @@ def get_isotope_parent_mol(m):
     return remove_hs_from_mol(m)
 
 
-def get_parent_mol(m, neutralize=True, check_exclusion=True, verbose=False):
+def get_parent_mol(
+    m: Mol, neutralize: bool = True, check_exclusion: bool = True, verbose: bool = False
+) -> Tuple[Mol, bool]:
     ipar = get_isotope_parent_mol(m)
     res, exclude = get_fragment_parent_mol(
         ipar, neutralize=neutralize, check_exclusion=check_exclusion, verbose=verbose
@@ -452,7 +464,7 @@ def get_parent_molblock(ctab, neutralize=True, check_exclusion=True, verbose=Fal
     return Chem.MolToMolBlock(parent, kekulize=False), exclude
 
 
-def standardize_mol(m, check_exclusion=True, sanitize=True):
+def standardize_mol(m: Mol, check_exclusion: bool = True, sanitize: bool = True) -> Mol:
     if check_exclusion:
         exclude = exclude_flag(m, includeRDKitSanitization=False)
     else:
